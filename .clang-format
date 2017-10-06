@@ -1,0 +1,7 @@
+AllowShortIfStatementsOnASingleLine: true
+BreakBeforeBraces: Allman
+BreakStringLiterals: false
+ColumnLimit: 0
+IndentCaseLabels: true
+IndentWidth: 8
+UseTab: Always

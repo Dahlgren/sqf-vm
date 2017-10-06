@@ -302,6 +302,7 @@ libsqfvm.*
 .*
 
 # make sure the git files themselves are included
+!.clang-format
 !.git*
 !.travis
 

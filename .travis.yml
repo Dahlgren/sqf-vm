@@ -4,6 +4,16 @@ os:
   - linux
   - osx
 
+addons:
+  apt:
+    packages:
+      - clang-format-3.9
+
+before_install:
+  - if [ "${TRAVIS_OS_NAME}" = "osx" ]; then brew install clang-format; fi
+
 script:
   - cd SQF-VM
   - make
+  - cd ..
+  - ./clang-format.sh
