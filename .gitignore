@@ -324,3 +324,6 @@ libsqfvm.*
 /tclap-1.2.2/ChangeLog
 /tclap-1.2.2/AUTHORS
 /tclap-1.2.2/aclocal.m4
+
+# Infer
+infer-out/

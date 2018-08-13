@@ -11,6 +11,8 @@ matrix:
           packages:
             - g++-6
       env:
+        - INFER_ARCH="linux64"
+        - INFER_VERSION="0.15.0"
         - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
     - os: linux
       addons:
@@ -21,12 +23,22 @@ matrix:
           packages:
             - clang-6.0
       env:
+        - INFER_ARCH="linux64"
+        - INFER_VERSION="0.15.0"
         - MATRIX_EVAL="CC=clang-6.0 && CXX=clang++-6.0"
     - os: osx
       osx_image: xcode9.4
+      env:
+        - INFER_ARCH="osx"
+        - INFER_VERSION="0.15.0"
 
 before_install:
   - eval "${MATRIX_EVAL}"
+install:
+  - curl -sSL "https://github.com/facebook/infer/releases/download/v${INFER_VERSION}/infer-${INFER_ARCH}-v${INFER_VERSION}.tar.xz" | sudo tar -xJ
+  - export INFER_BIN="`pwd`/infer-${INFER_ARCH}-v${INFER_VERSION}/bin/infer"
 script:
   - cd sqfvm-cpp
   - make
+  - make clean
+  - ${INFER_BIN} run -- make
