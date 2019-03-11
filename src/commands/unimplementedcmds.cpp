@@ -6,7 +6,6 @@
 using namespace sqf;
 void sqf::commandmap::initunimplemented()
 {
-#ifndef _DEBUG
 	add(binary(4, "lnbsetcurselrow", type::ANY, type::ANY, "", [](virtualmachine* vm, std::shared_ptr<value> l, std::shared_ptr<value> r) -> std::shared_ptr<value> { vm->err() << "NOT IMPLEMENTED (lnbsetcurselrow)." << std::endl; return std::make_shared<value>(); }));
 	add(binary(4, "removemenuitem", type::ANY, type::ANY, "", [](virtualmachine* vm, std::shared_ptr<value> l, std::shared_ptr<value> r) -> std::shared_ptr<value> { vm->err() << "NOT IMPLEMENTED (removemenuitem)." << std::endl; return std::make_shared<value>(); }));
 	add(binary(4, "curatorcoef", type::ANY, type::ANY, "", [](virtualmachine* vm, std::shared_ptr<value> l, std::shared_ptr<value> r) -> std::shared_ptr<value> { vm->err() << "NOT IMPLEMENTED (curatorcoef)." << std::endl; return std::make_shared<value>(); }));
@@ -1958,7 +1957,6 @@ void sqf::commandmap::initunimplemented()
 	add(unary("parsesimplearray", type::ANY, "", [](virtualmachine* vm, std::shared_ptr<value> r) -> std::shared_ptr<value> { vm->err() << "NOT IMPLEMENTED (parsesimplearray)." << std::endl; return std::make_shared<value>(); })); /* STRING */
 
 
-
 	add(nular("safezonex", "", [](virtualmachine* vm) -> std::shared_ptr<value> { vm->err() << "NOT IMPLEMENTED (safezonex)." << std::endl; return std::make_shared<value>(); }));
 	add(nular("clearmagazinepool", "", [](virtualmachine* vm) -> std::shared_ptr<value> { vm->err() << "NOT IMPLEMENTED (clearmagazinepool)." << std::endl; return std::make_shared<value>(); }));
 	add(nular("slingloadassistantshown", "", [](virtualmachine* vm) -> std::shared_ptr<value> { vm->err() << "NOT IMPLEMENTED (slingloadassistantshown)." << std::endl; return std::make_shared<value>(); }));
@@ -2157,5 +2155,4 @@ void sqf::commandmap::initunimplemented()
 	add(nular("getmouseposition", "", [](virtualmachine* vm) -> std::shared_ptr<value> { vm->err() << "NOT IMPLEMENTED (getmouseposition)." << std::endl; return std::make_shared<value>(); }));
 	add(nular("get3deniconsvisible", "", [](virtualmachine* vm) -> std::shared_ptr<value> { vm->err() << "NOT IMPLEMENTED (get3deniconsvisible)." << std::endl; return std::make_shared<value>(); }));
 	add(nular("isstreamfriendlyuienabled", "", [](virtualmachine* vm) -> std::shared_ptr<value> { vm->err() << "NOT IMPLEMENTED (isstreamfriendlyuienabled)." << std::endl; return std::make_shared<value>(); }));
-#endif
 }
