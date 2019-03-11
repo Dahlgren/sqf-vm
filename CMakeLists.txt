@@ -58,6 +58,33 @@ if (SQFVM_BUILD_STATIC_LIBRARY_NC)
 
     list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/Entry.cpp")
     list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/dllexports.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/debugger.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/parseassembly.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/instcallbinary.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/instcallnular.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/instcallunary.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/instmakearray.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/instgetvariable.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/callstack_configproperties.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/callstack_configclasses.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/callstack_findif.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/callstack_count.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/callstack_apply.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/callstack_select.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/callstack_for.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/callstack_foreach.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/callstack_while.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/callstack_isnil.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/callstack_sqftry.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/callstack_switch.cpp")
+    list(REMOVE_ITEM vm_src_nc "${PROJECT_SOURCE_DIR}/src/callstack_exitwith.cpp")
+	
+	
+	
+	
+	
+	
+	
 
     add_library(slibsqfvm_nc STATIC ${vm_src_nc})
     target_include_directories(slibsqfvm_nc PUBLIC ${PROJECT_SOURCE_DIR}/src)

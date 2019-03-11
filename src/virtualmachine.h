@@ -61,7 +61,6 @@ namespace sqf
 		std::map<int, std::vector<std::shared_ptr<groupdata>>> mgroups;
 		void performexecute(size_t exitAfter = ~0);
 		std::vector<std::shared_ptr<dlops>> mlibraries;
-		debugger* _debugger;
 		bool mexitflag;
 		bool mallowsleep;
 		bool mperformclassnamechecks;
@@ -121,8 +120,8 @@ namespace sqf
 		bool allowsleep() const { return mallowsleep; }
 		void allowsleep(bool flag) { mallowsleep = flag; }
 
-		debugger* dbg() { return _debugger; }
-		void dbg(debugger* debugger) { _debugger = debugger; }
+		debugger* dbg() { return nullptr; }
+		void dbg(debugger* debugger) { }
 		filesystem& get_filesystem() { return m_filesystem; }
 
 		size_t push_obj(std::shared_ptr<sqf::innerobj> obj);
