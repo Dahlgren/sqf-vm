@@ -85,14 +85,14 @@ void sqf::virtualmachine::performexecute(size_t exitAfter)
 		{
 			err() << "MAX INST COUNT REACHED (" << mmaxinst << ")" << std::endl;
 			(*merr) << inst->dbginf("RNT") << merr_buff.str();
-			merr_buff.str(std::string());
+            err_clear();
 			break;
 		}
 		inst->execute(this);
 		if (merrflag)
 		{
 			(*merr) << inst->dbginf("RNT") << merr_buff.str();
-			merrflag = false;
+            err_clear();
 
 			// Try to find a callstack_sqftry
 			auto res = std::find_if(mactivestack->stacks_begin(), mactivestack->stacks_end(), [](std::shared_ptr<sqf::callstack> cs) -> bool {
@@ -100,7 +100,7 @@ void sqf::virtualmachine::performexecute(size_t exitAfter)
 			});
 			if (res == mactivestack->stacks_end())
 			{
-				merr_buff.str(std::string());
+                err_clear();
 				//Only for non-scheduled (and thus the mainstack)
 				if (!mactivestack->isscheduled())
 				{
@@ -115,7 +115,7 @@ void sqf::virtualmachine::performexecute(size_t exitAfter)
 				}
 				auto sqftry = std::dynamic_pointer_cast<sqf::callstack_sqftry>(*res);
 				sqftry->except(merr_buff.str());
-				merr_buff.str(std::string());
+                err_clear();
 			}
 		}
 		
@@ -125,12 +125,7 @@ void sqf::virtualmachine::performexecute(size_t exitAfter)
 			mwrn_buff.str(std::string());
 			mwrnflag = false;
 		}
-		if (moutflag)
-		{
-			(*mout) << mout_buff.str();
-			mout_buff.str(std::string());
-			moutflag = false;
-		}
+        out_buffprint();
 	}
 }
 std::string sqf::virtualmachine::dbgsegment(const char* full, size_t off, size_t length)
