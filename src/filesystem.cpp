@@ -12,15 +12,15 @@ void sqf::filesystem::addPathMappingInternal(std::filesystem::path virt, std::fi
         virtElements.emplace_back(el.string());
     }
 
-    auto found = m_virtualphysicalmapNew.find(virtElements[0]);
-    auto curIter = m_virtualphysicalmapNew.end();
+    auto found = m_virtualphysicalmap.find(virtElements[0]);
+    auto curIter = m_virtualphysicalmap.end();
     bool first = true;
     for (auto& it : virtElements) {
         if (first) { //first element
             first = false; //this is ugly. But comparing iterators doesn't work
-            curIter = m_virtualphysicalmapNew.find(it);
-            if (curIter == m_virtualphysicalmapNew.end())
-                curIter = m_virtualphysicalmapNew.insert({ it, pathElement{} }).first;
+            curIter = m_virtualphysicalmap.find(it);
+            if (curIter == m_virtualphysicalmap.end())
+                curIter = m_virtualphysicalmap.insert({ it, pathElement{} }).first;
             continue;
         }
         auto& curEl = curIter->second;
@@ -44,14 +44,14 @@ std::optional<std::filesystem::path> sqf::filesystem::resolvePath(std::filesyste
 
     std::vector<std::map<std::string, pathElement>::iterator> pathStack; //In case we need to walk back upwards
 
-    auto curIter = m_virtualphysicalmapNew.end();
+    auto curIter = m_virtualphysicalmap.end();
     bool first = true;
     for (auto& it : virtElements) {
-        if (first) { //first element
+        if (first) { //first element needs special handling as it comes directly from the map
             first = false; //this is ugly. But comparing iterators doesn't work
-            curIter = m_virtualphysicalmapNew.find(it);
-            if (curIter == m_virtualphysicalmapNew.end())
-                return {}; //if we didn't find the starting element, we won't find any other
+            curIter = m_virtualphysicalmap.find(it);
+            if (curIter == m_virtualphysicalmap.end())
+                return {}; //if we didn't find the starting element, we won't find any of the next elements either
             pathStack.emplace_back(curIter);
             continue;
         }
@@ -85,81 +85,27 @@ std::optional<std::filesystem::path> sqf::filesystem::resolvePath(std::filesyste
 std::optional<std::string> sqf::filesystem::try_get_physical_path(std::string virt, std::string current)
 {
 	std::string virtMapping;
-	std::string physPath;
     if (virt.front() != '\\') { //It's a local path
         auto parentDirectory = std::filesystem::path(current).parent_path(); //Get parent of current file
-        auto wantedFile = parentDirectory / virt;
+        auto wantedFile = (parentDirectory / virt).lexically_normal();
+
+        if (virt.find("..") != std::string::npos) {//need to check against physical boundary
+            //#TODO implement this as a tree lookup
+            auto found = std::find_if(m_physicalboundaries.begin(), m_physicalboundaries.end(), [search = wantedFile.string()](std::string_view it) -> bool {
+                return search.find(it) != std::string::npos;
+            });
+
+            if (found == m_physicalboundaries.end())
+                return {}; //boundary violation
+        }
 
         if (std::filesystem::exists(wantedFile)) return wantedFile.string();
     } else { //global path
-        auto resolved = resolvePath(virt); //#TODO only if starting with \\ 
+        auto resolved = resolvePath(virt);
         if (resolved) {
-            return resolved->string();
+            if (std::filesystem::exists(*resolved)) return resolved->string();
         }
     }
-
-	virt = sanitize(virt);
-	for (const auto& vpath : m_virtualpaths)
-	{
-		if (virt.find(vpath) == 0)
-		{
-			virtMapping = vpath;
-			virt = virt.substr(vpath.length());
-		}
-	}
-	if (virtMapping.empty())
-	{
-        
-
-
-		auto res = std::find_if(m_virtualpaths.begin(), m_virtualpaths.end(), [current](std::string it) -> bool
-		{
-			return current.find(it) != std::string::npos;
-		});
-		if (res == m_virtualpaths.end())
-		{
-			auto res2 = std::find_if(m_physicalboundaries.begin(), m_physicalboundaries.end(), [virt, current](std::string it) -> bool
-			{
-				auto findRes = current.find(it);
-				if (!current.empty() && findRes == std::string::npos)
-				{
-					return false;
-				}
-				auto partial = current.substr(it.length());
-				partial = up(partial);
-				partial = navigate(it, partial);
-				partial = navigate(partial, virt);
-				return file_exists(partial);
-			});
-			if (res2 == m_physicalboundaries.end())
-			{
-				return {};
-			}
-			else
-			{
-				physPath = *res2;
-				auto partial = current.substr(physPath.length());
-				partial = up(partial);
-				partial = navigate(physPath, partial);
-				partial = navigate(partial, virt);
-				return partial;
-			}
-		}
-		else
-		{
-			physPath = m_virtualphysicalmap[*res];
-		}
-	}
-	else
-	{
-		physPath = m_virtualphysicalmap[virtMapping];
-	}
-	physPath = navigate(physPath, virt);
-	if (std::find_if(m_physicalboundaries.begin(), m_physicalboundaries.end(), [physPath](std::string it) -> bool { return physPath.find(it) == 0; }) == m_physicalboundaries.end())
-	{
-		return {};
-	}
-	return physPath;
 }
 
 void sqf::filesystem::add_allowed_physical(std::string phys)
@@ -174,7 +120,7 @@ void sqf::filesystem::add_mapping(std::string virt, std::string phys)
 	phys = sanitize(phys);
 	m_physicalboundaries.push_back(phys);
 	m_virtualpaths.push_back(virt);
-	m_virtualphysicalmap[virt] = phys;
+    addPathMappingInternal(virt, phys);
 }
 
 void sqf::filesystem::add_mapping_auto(std::string phys) {
@@ -251,40 +197,4 @@ std::string sqf::filesystem::sanitize(std::string input)
 		sstream << input[i];
 	}
 	return sstream.str();
-}
-
-std::string sqf::filesystem::down(std::string input, std::string navigator)
-{
-	std::stringstream sstream;
-	sstream << input << FSDELIMITER << navigator;
-	return sstream.str();
-}
-
-std::string sqf::filesystem::navigate(std::string input, std::string navigator)
-{
-	size_t index = 0;
-	if (navigator.empty())
-	{
-		return input;
-	}
-	while ((index = navigator.find(FSDELIMITER, 1)) != std::string::npos)
-	{
-		std::string tmp = navigator.substr(1, index - 1);
-		if (tmp.empty())
-		{
-			continue;
-		}
-		navigator = navigator.substr(index);
-		if (tmp == "..")
-		{
-			input = up(input);
-		}
-		else
-		{
-			input = down(input, tmp);
-		}
-	}
-	input = down(input, navigator.substr(1));
-
-	return input;
 }
