@@ -377,12 +377,26 @@ namespace {
 	{
 		size_t word_start = fileinfo.off;
 		bool inside_word = false;
+		bool string_mode = false;
 		std::stringstream sstream;
 		char c;
 		while (fileinfo.off != endindex && (c = fileinfo.next()) != '\0')
 		{
+			if (string_mode)
+			{
+				if (c == '"')
+				{
+					string_mode = false;
+				}
+				sstream << c;
+				continue;
+			}
 			switch (c)
 			{
+				case '"':
+					string_mode = true;
+					sstream << c;
+				break;
 				case 'a': case 'b': case 'c': case 'd': case 'e':
 				case 'f': case 'g': case 'h': case 'i': case 'j':
 				case 'k': case 'l': case 'm': case 'n': case 'o':
@@ -413,10 +427,7 @@ namespace {
 						auto res = h.contains_macro(word);
 						if (res.has_value())
 						{
-							if (res.value().hasargs)
-							{
-								fileinfo.move_back();
-							}
+							fileinfo.move_back();
 							auto handled = handle_macro(h, fileinfo, res.value());
 							if (h.errflag)
 							{
@@ -567,13 +578,22 @@ namespace {
 				}
 				return "";
 			}
-			std::stringstream sstream;
-			sstream << "#file " << otherfinfo.path << std::endl;
-			sstream << "#line 0" << std::endl;
-			sstream << parse_file(h, otherfinfo) << std::endl;
-			sstream << "#file " << fileinfo.path << std::endl;
-			sstream << "#line " << fileinfo.line - 1 << std::endl;
-			return sstream.str();
+			std::string output;
+			auto lineInfo = std::to_string(fileinfo.line - 1);
+			auto parsedFile = parse_file(h, otherfinfo);
+			output.reserve(
+				compiletime::strlen("#file ") + otherfinfo.path.size() + compiletime::strlen("\n") +
+				compiletime::strlen("#line 0\n") +
+				parsedFile.size() + compiletime::strlen("\n") +
+				compiletime::strlen("#file ") + fileinfo.path.size() + compiletime::strlen("\n") +
+				compiletime::strlen("#line ") + lineInfo.size() + compiletime::strlen("\n")
+			);
+			output.append("#file "); output.append(otherfinfo.path); output.append("\n");
+			output.append("#line 0\n");
+			output.append(parsedFile); output.append("\n");
+			output.append("#file "); output.append(fileinfo.path); output.append("\n");
+			output.append("#line "); output.append(lineInfo); output.append("\n");
+			return std::move(output);
 		}
 		else if (inst == "DEFINE")
 		{ // #define TEST(A, B, C) A #B##C
