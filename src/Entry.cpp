@@ -2,6 +2,7 @@
 #include "netserver.h"
 #include "virtualmachine.h"
 #include "commandmap.h"
+#include "cmd.h"
 #include "value.h"
 #include "vmstack.h"
 #include "configdata.h"
@@ -18,6 +19,7 @@
 
 #include "dllexports.h"
 #include "debugger.h"
+#include <signal.h>
 #ifdef _WIN32
 #include <windows.h>
 #include <direct.h>
@@ -26,12 +28,28 @@
 #include <sys/ioctl.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <execinfo.h>
 #endif
 
 #ifdef _WIN32
 #define RELPATHHINT "Supports absolut and relative pathing using '.\\path\\to\\file' or 'C:\\path\\to\\file'."
 #else
 #define RELPATHHINT "Supports absolut and relative pathing using './path/to/file' or '/path/to/file'."
+#endif
+
+
+#ifdef WIN32
+// ToDo: Implement StackTrace on error
+#else
+void handle_SIGSEGV(int val)
+{
+	void *arr[20];
+	size_t size;
+	size = backtrace(arr, 20);
+	fprintf(stderr, "Error: signal %d:\n", val);
+	backtrace_symbols_fd(arr, size, STDERR_FILENO);
+	exit(-1);
+}
 #endif
 
 
@@ -79,7 +97,7 @@ std::string arg_file_actual_path(std::string executable_path, std::string f)
 	}
 	if (f.length() > 2 && f[0] == '.' && (f[1] == '/' || f[1] == '\\'))
 	{
-		sanitized = sqf::filesystem::navigate(executable_path, sanitized);
+		sanitized = std::filesystem::absolute((std::filesystem::path(executable_path) / sanitized).lexically_normal()).string();
 	}
 	return sanitized;
 }
@@ -95,6 +113,17 @@ std::string extension(std::string input)
 
 int main(int argc, char** argv)
 {
+#ifdef WIN32
+	// ToDo: Implement StackTrace on error
+#else
+	struct sigaction action_SIGSEGV;
+
+	memset(&action_SIGSEGV, 0, sizeof(struct sigaction));
+	action_SIGSEGV.sa_handler = handle_SIGSEGV;
+	sigaction(SIGSEGV, &action_SIGSEGV, NULL);
+#endif
+
+
 	auto executable_path = sqf::filesystem::sanitize(get_working_dir());
 	TCLAP::CmdLine cmd("Emulates the ArmA-Series SQF environment.", ' ', VERSION_FULL "\n");
 
@@ -126,6 +155,14 @@ int main(int argc, char** argv)
 	TCLAP::MultiArg<std::string> preprocessFileArg("E", "preprocess-file", "Runs the preprocessor on provided file and prints it to stdout. " RELPATHHINT "!BE AWARE! This is case-sensitive!", false, "PATH");
 	cmd.add(preprocessFileArg);
 
+	TCLAP::MultiArg<std::string> commandDummyNular("", "command-dummy-nular", "Adds the provided command as dummy.", false, "NAME");
+	cmd.add(commandDummyNular);
+
+	TCLAP::MultiArg<std::string> commandDummyUnary("", "command-dummy-unary", "Adds the provided command as dummy.", false, "NAME");
+	cmd.add(commandDummyUnary);
+
+	TCLAP::MultiArg<std::string> commandDummyBinary("", "command-dummy-binary", "Adds the provided command as dummy. Note that you need to also provide a precedence. Example: 4|commandname", false, "PRECEDENCE|NAME");
+	cmd.add(commandDummyBinary);
 
 	TCLAP::SwitchArg automatedArg("a", "automated", "Disables all possible prompts.", false);
 	cmd.add(automatedArg);
@@ -139,6 +176,9 @@ int main(int argc, char** argv)
 	TCLAP::SwitchArg disableClassnameCheckArg("c", "check-classnames", "Enables the config checking for eg. createVehicle.", false);
 	cmd.add(disableClassnameCheckArg);
 
+	TCLAP::SwitchArg disableMacroWarningsArg("", "disable-macro-warnings", "Disables the warning for duplicate defines and undefines without a corresponding define.\n", false);
+	cmd.add(disableMacroWarningsArg);
+
 
 	TCLAP::MultiArg<std::string> loadArg("l", "load", "Adds provided path to the allowed locations list. " RELPATHHINT "\n"
 		"An allowed location, is a location SQF-VM will be allowed to load files from."
@@ -148,14 +188,16 @@ int main(int argc, char** argv)
 		"!BE AWARE! This is case-sensitive!", false, "PATH");
 	cmd.add(loadArg);
 
-	TCLAP::MultiArg<std::string> virtualArg("v", "virtual", "Creates a mapping for a virtual and a physical path. Mapping is separated by a '|', with the left side being the physical, and the right argument the virtual path. " RELPATHHINT, false, "PATH|VIRTUAL");
+	TCLAP::MultiArg<std::string> virtualArg("v", "virtual", "Creates a mapping for a virtual and a physical path."
+		"Mapping is separated by a '|', with the left side being the physical, and the right argument the virtual path. " RELPATHHINT, false, "PATH|VIRTUAL");
 	cmd.add(virtualArg);
 
 	TCLAP::SwitchArg verboseArg("", "verbose", "Enables additional output.", false);
 	cmd.add(verboseArg);
 
-	TCLAP::SwitchArg parseOnlyArg("", "parse-only", "Disables all code execution entirely and performs only the parsing task."
-		"Note that this also will prevent the debugger to start.", false);
+	TCLAP::SwitchArg parseOnlyArg("", "parse-only", "Disables all code execution entirely and performs only the parsing & assembly generation tasks. "
+		"Note that this also will prevent the debugger to start. "
+		"To disable assembly generation too, refer to --no-assembly-creation.", false);
 	cmd.add(parseOnlyArg);
 
 	TCLAP::SwitchArg noWorkPrintArg("", "no-work-print", "Disables the printing of all values which are on the work stack.", false);
@@ -166,6 +208,11 @@ int main(int argc, char** argv)
 
 	TCLAP::SwitchArg noLoadExecDirArg("", "no-load-execdir", "Prevents automatically adding the workspace to the path of allowed locations.", false);
 	cmd.add(noLoadExecDirArg);
+
+	TCLAP::SwitchArg noAssemblyCreationArg("", "no-assembly-creation", "Will force to use only the SQF parser. "
+		"Execution of SQF-code will not work with this. "
+		"Useful, if one only wants to perform syntax checks.", false);
+	cmd.add(noAssemblyCreationArg);
 
 	cmd.getArgList().reverse();
 
@@ -189,7 +236,7 @@ int main(int argc, char** argv)
 		}
 		if (f.length() > 2 && f[0] == '.' && (f[1] == '/' || f[1] == '\\'))
 		{
-			sanitized = sqf::filesystem::navigate(executable_path, sanitized);
+			sanitized = std::filesystem::absolute((std::filesystem::path(executable_path) / sanitized).lexically_normal()).string();
 		}
 		try
 		{
@@ -253,7 +300,8 @@ int main(int argc, char** argv)
 	std::vector<std::string> pbo_files = inputPboArg.getValue();
 	bool errflag = false;
 	bool automated = automatedArg.getValue();
-	bool parseOnly = parseOnlyArg.getValue();
+	bool noAssemblyCreation = noAssemblyCreationArg.getValue();
+	bool parseOnly = parseOnlyArg.getValue() || noAssemblyCreation;
 	for (auto& f : inputArg.getValue())
 	{
 		auto ext = extension(f);
@@ -283,6 +331,7 @@ int main(int argc, char** argv)
 
 	auto debugger_port = debuggerArg.getValue();
 
+	sqf::parse::preprocessor::settings::disable_warn_define = disableMacroWarningsArg.getValue();
 
 	sqf::virtualmachine vm;
 	sqf::commandmap::get().init();
@@ -305,7 +354,7 @@ int main(int argc, char** argv)
 		}
 		if (f.length() > 2 && f[0] == '.' && (f[1] == '/' || f[1] == '\\'))
 		{
-			sanitized = sqf::filesystem::navigate(executable_path, sanitized);
+			sanitized = std::filesystem::absolute((std::filesystem::path(executable_path) / sanitized).lexically_normal()).string();
 		}
 		vm.get_filesystem().add_allowed_physical(sanitized);
 		if (verbose)
@@ -332,13 +381,40 @@ int main(int argc, char** argv)
 		}
 		if (f.length() > 2 && f[0] == '.' && (f[1] == '/' || f[1] == '\\'))
 		{
-			physSanitized = sqf::filesystem::navigate(executable_path, physSanitized);
+			physSanitized = (std::filesystem::path(executable_path) / physSanitized).lexically_normal().string();
 		}
 		vm.get_filesystem().add_mapping(virtSanitized, physSanitized);
 		if (verbose)
 		{
 			std::cout << "Mapped '" << virtSanitized << "' onto '" << physSanitized << "'." << std::endl;
 		}
+	}
+	for (auto& f : commandDummyNular.getValue())
+	{
+		sqf::commandmap::get().add(sqf::nular(f, "DUMMY", [](sqf::virtualmachine* vm) -> std::shared_ptr<sqf::value> {
+			vm->err() << "DUMMY" << std::endl; return std::make_shared<sqf::value>();
+		}));
+	}
+	for (auto& f : commandDummyUnary.getValue())
+	{
+		sqf::commandmap::get().add(sqf::unary(f, sqf::type::ANY, "DUMMY", [](sqf::virtualmachine* vm, std::shared_ptr<sqf::value> r) -> std::shared_ptr<sqf::value> {
+			vm->err() << "DUMMY" << std::endl; return std::make_shared<sqf::value>();
+		}));
+	}
+	for (auto& f : commandDummyBinary.getValue())
+	{
+		auto split_index = f.find('|');
+		if (split_index == -1)
+		{
+			errflag = true;
+			std::cerr << "Failed find splitter '|' for precedence '" << f << "'." << std::endl;
+			continue;
+		}
+		auto precedence = f.substr(0, split_index);
+		auto name = f.substr(split_index + 1);
+		sqf::commandmap::get().add(sqf::binary(std::stoi(precedence), name, sqf::type::ANY, sqf::type::ANY, "DUMMY", [](sqf::virtualmachine* vm, std::shared_ptr<sqf::value> l, std::shared_ptr<sqf::value> r) -> std::shared_ptr<sqf::value> {
+			vm->err() << "DUMMY" << std::endl; return std::make_shared<sqf::value>();
+		}));
 	}
 	if (errflag)
 	{
@@ -383,7 +459,7 @@ int main(int argc, char** argv)
 			}
 			if (f.length() > 2 && f[0] == '.' && (f[1] == '/' || f[1] == '\\'))
 			{
-				sanitized = sqf::filesystem::navigate(executable_path, sanitized);
+				sanitized = std::filesystem::absolute((std::filesystem::path(executable_path) / sanitized).lexically_normal()).string();
 			}
 			if (verbose)
 			{
@@ -427,7 +503,7 @@ int main(int argc, char** argv)
 			}
 			if (f.length() > 2 && f[0] == '.' && (f[1] == '/' || f[1] == '\\'))
 			{
-				sanitized = sqf::filesystem::navigate(executable_path, sanitized);
+				sanitized = std::filesystem::absolute((std::filesystem::path(executable_path) / sanitized).lexically_normal()).string();
 			}
 			if (verbose)
 			{
@@ -451,7 +527,14 @@ int main(int argc, char** argv)
 				{
 					std::cout << "Parsing file '" << sanitized << std::endl;
 				}
-				vm.parse_sqf(ppedStr, f);
+				if (noAssemblyCreation)
+				{
+					vm.parse_sqf_cst(ppedStr, errflag, f);
+				}
+				else
+				{
+					errflag = vm.parse_sqf(ppedStr, f);
+				}
 			}
 		}
 		catch (const std::runtime_error& ex)
@@ -473,7 +556,7 @@ int main(int argc, char** argv)
 			}
 			if (f.length() > 2 && f[0] == '.' && (f[1] == '/' || f[1] == '\\'))
 			{
-				sanitized = sqf::filesystem::navigate(executable_path, sanitized);
+				sanitized = std::filesystem::absolute((std::filesystem::path(executable_path) / sanitized).lexically_normal()).string();
 			}
 			if (verbose)
 			{
@@ -521,6 +604,7 @@ int main(int argc, char** argv)
 		sqf::commandmap::get().uninit();
 		return errflag ? -1 : 0;
 	}
+
 	//Load all sqf-code provided via arg.
 	for (auto& raw : sqfArg.getValue())
 	{
@@ -576,14 +660,38 @@ int main(int argc, char** argv)
 
 			auto input = sstream.str();
 			bool err = false;
-			auto inputAfterPP = sqf::parse::preprocessor::parse(&vm, input, err, sqf::filesystem::navigate(executable_path, "__commandlinefeed.sqf"));
-			if (err)
+			auto inputAfterPP = sqf::parse::preprocessor::parse(
+				&vm,
+				input,
+				err,
+				(std::filesystem::path(executable_path) / "__commandlinefeed.sqf").string()
+			);
+			if (err || vm.err_hasdata())
 			{
 				vm.err_buffprint();
 			}
 			else
 			{
-				vm.parse_sqf(inputAfterPP, sqf::filesystem::navigate(executable_path, "__commandlinefeed.sqf"));
+				if (noAssemblyCreation)
+				{
+					vm.parse_sqf_cst(inputAfterPP, err, (std::filesystem::path(executable_path) / "__commandlinefeed.sqf").string());
+				}
+				else
+				{
+					err = vm.parse_sqf(inputAfterPP, (std::filesystem::path(executable_path) / "__commandlinefeed.sqf").string());
+				}
+				if (vm.out_hasdata())
+				{
+					vm.out_buffprint();
+				}
+				if (vm.wrn_hasdata())
+				{
+					vm.wrn_buffprint();
+				}
+				if (vm.err_hasdata())
+				{
+					vm.err_buffprint();
+				}
 			}
 		}
 
@@ -601,15 +709,15 @@ int main(int argc, char** argv)
 		}
 		if (!noWorkPrintArg.getValue())
 		{
-			std::shared_ptr<sqf::value> val;
-			bool success;
-			do {
-				val = vm.stack()->popval(success);
-				if (success)
-				{
-					std::cout << "[WORK]\t<" << sqf::type_str(val->dtype()) << ">\t" << val->as_string() << std::endl;
-				}
-			} while (success);
+			auto val = vm.stack()->last_value();
+			if (val != nullptr)
+			{
+				std::cout << "[WORK]\t<" << sqf::type_str(val->dtype()) << ">\t" << val->as_string() << std::endl;
+			}
+			else
+			{
+				std::cout << "[WORK]\t<" << "EMPTY" << ">\t" << std::endl;
+			}
 			std::wcout << std::endl;
 		}
 

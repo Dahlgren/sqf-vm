@@ -15,11 +15,19 @@
 #include "callstack_sqftry.h"
 #include "sqfnamespace.h"
 #include "innerobj.h"
+#include "scalardata.h"
 //#include "parsepp_handler.h"
 
 #include <iostream>
 #include <cwctype>
 #include <sstream>
+
+// #define DEBUG_VM_ASSEMBLY
+
+#if !defined(_DEBUG) && defined(DEBUG_VM_ASSEMBLY)
+#undef DEBUG_VM_ASSEMBLY
+#endif // !_RELEASE
+
 
 
 sqf::virtualmachine::virtualmachine(unsigned long long maxinst)
@@ -42,6 +50,7 @@ sqf::virtualmachine::virtualmachine(unsigned long long maxinst)
 	mexitflag = false;
 	mallowsleep = true;
 	mplayer_obj = innerobj::create(this, "CAManBase", false);
+	mcreatedtimestamp = system_time();
 }
 void sqf::virtualmachine::execute()
 {
@@ -89,6 +98,31 @@ void sqf::virtualmachine::performexecute(size_t exitAfter)
 			break;
 		}
 		inst->execute(this);
+#ifdef DEBUG_VM_ASSEMBLY
+		bool success;
+		std::vector<std::shared_ptr<sqf::value>> vals;
+		do {
+			auto val = stack()->popval(success);
+			if (success)
+			{
+				vals.push_back(val);
+				if (val != nullptr)
+				{
+					std::cout << "[WORK]\t<" << sqf::type_str(val->dtype()) << ">\t" << val->as_string() << std::endl;
+				}
+				else
+				{
+					std::cout << "[WORK]\t<" << "EMPTY" << ">\t" << std::endl;
+				}
+			}
+		} while (success);
+		while (!vals.empty())
+		{
+			auto it = vals.back();
+			vals.pop_back();
+			stack()->pushval(it);
+		}
+#endif
 		if (merrflag)
 		{
 			(*merr) << inst->dbginf("RNT") << merr_buff.str();
@@ -290,20 +324,13 @@ void navigate_pretty_print_sqf(const char* full, sqf::virtualmachine* vm, astnod
 	}
 }
 
-astnode sqf::virtualmachine::parse_sqf_cst(std::string_view code)
+astnode sqf::virtualmachine::parse_sqf_cst(std::string_view code, bool& errorflag, std::string filename)
 {
 	auto h = sqf::parse::helper(merr, dbgsegment, contains_nular, contains_unary, contains_binary, precedence);
-	bool errflag = false;
-	return sqf::parse::sqf::parse_sqf(code.data(), h, errflag, "");
+	return sqf::parse::sqf::parse_sqf(code.data(), h, errorflag, filename);
 }
 
-astnode sqf::virtualmachine::parse_sqf_cst(std::string_view code, bool& errorflag)
-{
-    auto h = sqf::parse::helper(merr, dbgsegment, contains_nular, contains_unary, contains_binary, precedence);
-    return sqf::parse::sqf::parse_sqf(code.data(), h, errorflag, "");
-}
-
-void sqf::virtualmachine::parse_sqf(std::string code, std::stringstream* sstream)
+void sqf::virtualmachine::parse_sqf_tree(std::string code, std::stringstream* sstream)
 {
 	auto h = sqf::parse::helper(merr, dbgsegment, contains_nular, contains_unary, contains_binary, precedence);
 	bool errflag = false;
@@ -311,21 +338,23 @@ void sqf::virtualmachine::parse_sqf(std::string code, std::stringstream* sstream
 	print_navigate_ast(sstream, node, sqf::parse::sqf::astkindname);
 }
 
-void sqf::virtualmachine::parse_sqf(std::shared_ptr<sqf::vmstack> vmstck, std::string code, std::shared_ptr<sqf::callstack> cs, std::string filename)
+bool sqf::virtualmachine::parse_sqf(std::shared_ptr<sqf::vmstack> vmstck, std::string code, std::shared_ptr<sqf::callstack> cs, std::string filename)
 {
 	if (!cs.get())
 	{
 		cs = std::make_shared<sqf::callstack>(this->missionnamespace());
 		vmstck->pushcallstack(cs);
 	}
-	auto h = sqf::parse::helper(merr, dbgsegment, contains_nular, contains_unary, contains_binary, precedence);
+	auto h = sqf::parse::helper(&merr_buff, dbgsegment, contains_nular, contains_unary, contains_binary, precedence);
 	bool errflag = false;
 	auto node = sqf::parse::sqf::parse_sqf(code.c_str(), h, errflag, filename);
-
+	this->merrflag = h.err_hasdata();
 	if (!errflag)
 	{
 		navigate_sqf(code.c_str(), this, cs, node);
+		errflag = this->err_hasdata();
 	}
+	return errflag;
 }
 
 void sqf::virtualmachine::pretty_print_sqf(std::string code)
