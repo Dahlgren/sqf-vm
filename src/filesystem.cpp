@@ -12,6 +12,9 @@ void sqf::filesystem::addPathMappingInternal(std::filesystem::path virt, std::fi
         virtElements.emplace_back(el.string());
     }
 
+    if (virtElements.front() == "\\") //We already know it's a global path. We don't want starting backslash
+        virtElements.erase(virtElements.begin());
+
     auto found = m_virtualphysicalmap.find(virtElements[0]);
     auto curIter = m_virtualphysicalmap.end();
     bool first = true;
