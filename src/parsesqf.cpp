@@ -1316,7 +1316,6 @@ namespace sqf
 					errflag = true;
 				}
 				thisnode.length = curoff - thisnode.offset;
-                thisnode.content = std::string(&code[thisnode.offset + 1], thisnode.length - 2);
 				root.children.emplace_back(std::move(thisnode));
 			}
 			//ARRAY = '[' [ BINARYEXPRESSION { ',' BINARYEXPRESSION } ] ']';
