@@ -1,4 +1,5 @@
 #include "stringdata.h"
+#include <algorithm>
 #include <stdexcept>
 #include <vector>
 
